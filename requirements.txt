@@ -1,0 +1,10 @@
+fastapi>=0.115
+uvicorn>=0.30
+httpx>=0.27
+pydantic>=2.7
+python-dotenv>=1.0
+pytest>=8.0
+
+# Laya mode is installed separately because it pulls in PyTorch (large).
+# Pick the PyTorch build for your machine first (see README), then:
+#   pip install laya

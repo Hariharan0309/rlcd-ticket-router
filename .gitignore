@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# rlcd-ticket-router: downloaded model weights (Laya)
+.model-cache/

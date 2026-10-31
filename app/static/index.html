@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticket Router</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1d2330; --muted: #667085; --line: #e3e6eb;
+    --accent: #3b5bdb; --green: #1f9d55; --green-bg: #e6f6ec; --amber: #b45309; --amber-bg: #fef3c7;
+    --red: #c92a2a; --red-bg: #fdecec; --bar: #c5cee0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 18px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 28px 32px 48px; }
+  h1 { margin: 0; font-size: 32px; }
+  .sub { margin: 4px 0 24px; color: var(--muted); }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 24px; }
+
+  textarea { width: 100%; height: 120px; padding: 12px 14px; font: inherit; resize: vertical;
+             border: 1px solid var(--line); border-radius: 10px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+  .examples button { font: 15px system-ui, sans-serif; padding: 6px 12px; border-radius: 999px;
+                     border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  .examples button:hover { border-color: var(--accent); color: var(--accent); }
+  .examples b { font-weight: 600; color: var(--muted); margin-right: 4px; }
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; }
+  select, .go { font: inherit; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); }
+  .go { background: var(--accent); color: #fff; border: none; font-weight: 600; padding: 10px 28px; cursor: pointer; }
+  .go:disabled { opacity: .6; cursor: wait; }
+  .dial { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 320px; }
+  .dial input { flex: 1; accent-color: var(--accent); height: 28px; }
+  .dial output { font-size: 28px; font-weight: 700; width: 70px; text-align: right; }
+
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; margin-top: 20px; }
+  .card h2 { margin: 0; font-size: 24px; display: flex; justify-content: space-between; align-items: baseline; }
+  .card h2 small { font-size: 16px; font-weight: 500; color: var(--muted); }
+  .badge { margin: 14px 0 6px; padding: 14px; border-radius: 12px; text-align: center;
+           font-size: 30px; font-weight: 800; letter-spacing: .5px; }
+  .badge.auto { background: var(--green-bg); color: var(--green); }
+  .badge.human { background: var(--amber-bg); color: var(--amber); }
+  .reason { text-align: center; color: var(--muted); margin-bottom: 16px; }
+  .error { background: var(--red-bg); color: var(--red); padding: 10px 14px; border-radius: 10px; }
+
+  .label { font-size: 14px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 14px 0 6px; }
+  .row { display: grid; grid-template-columns: 100px 1fr 56px; align-items: center; gap: 10px; margin: 4px 0; }
+  .track { position: relative; height: 18px; background: #eef0f4; border-radius: 6px; }
+  .fill { height: 100%; background: var(--bar); border-radius: 6px; }
+  .row.top .fill { background: var(--accent); }
+  .row.top { font-weight: 700; }
+  .pct { text-align: right; font-variant-numeric: tabular-nums; }
+  .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text); }
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .fact { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+  .fact .value { font-size: 24px; font-weight: 700; }
+  .flag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 6px; font-size: 14px;
+          background: var(--red-bg); color: var(--red); vertical-align: middle; }
+  .cost { margin-top: 12px; color: var(--muted); font-size: 16px; font-variant-numeric: tabular-nums; }
+  .cost b { color: var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ticket Router</h1>
+  <p class="sub">Paste a support ticket. The model returns probabilities; the threshold decides what happens.</p>
+
+  <section class="panel">
+    <textarea id="ticket" placeholder="Paste a support ticket here..."></textarea>
+    <div class="examples" id="examples"></div>
+    <div class="controls">
+      <select id="provider">
+        <option value="jev">Jev</option>
+        <option value="laya">Laya</option>
+        <option value="both">Compare both</option>
+        <option value="mock">Mock (no model)</option>
+      </select>
+      <button class="go" id="go">Route it</button>
+      <label class="dial">Threshold
+        <input id="threshold" type="range" min="50" max="99" value="90">
+        <output id="thresholdOut">90%</output>
+      </label>
+    </div>
+  </section>
+
+  <section class="results" id="results"></section>
+  <p class="sub" id="rate" style="margin-top: 16px"></p>
+</main>
+
+<script>
+const EXAMPLES = [
+  ["Clear", "Charged twice", "Hi, I was charged twice for my March invoice (order #4821). Please refund the duplicate $49 charge."],
+  ["Clear", "App crash", "Since this morning's update the mobile app crashes every time I open the Settings screen. iOS 18, app version 5.2.1. Reinstalling didn't help."],
+  ["Vague", "Something's off", "Hey, something seems off with my account. Can someone take a look?"],
+  ["Vague", "Not working", "It's not working again. Please fix."],
+  ["Tricky", "Angry refund + bug", "This is ridiculous. Your export feature has been broken for 3 days and my whole team can't do their work. I'm paying for 20 seats. I want a full refund for this month NOW or I'm cancelling."],
+  ["Off-topic", "Banana bread", "Does anyone have a good banana bread recipe? My oven runs a bit hot."],
+];
+
+const $ = (id) => document.getElementById(id);
+let lastResults = [];  // kept so the slider can re-route without calling the model again
+let usdInr = null;     // {inr_per_usd, date, source} from /config, or null
+
+// Same rule as app/router.py. It runs here too so the badge moves instantly with the slider.
+function route(decision, threshold) {
+  const team = Object.keys(decision.team_probs).reduce((a, b) => decision.team_probs[a] >= decision.team_probs[b] ? a : b);
+  const confidence = decision.team_probs[team];
+  const label = `${cap(team)} at ${pct(confidence)}`;
+  if (team === "other") return { action: "SEND TO HUMAN", team, reason: `${label}: no team fits, a human should look` };
+  if (confidence >= threshold) return { action: "AUTO-HANDLE", team, reason: `${label}, above the ${pct(threshold)} threshold` };
+  return { action: "SEND TO HUMAN", team, reason: `${label}, below the ${pct(threshold)} threshold` };
+}
+
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+// Round down (same as app/router.py) so 0.8996 never shows as 90% next to a 90% threshold.
+const pct = (p) => `${Math.floor(p * 100 + 1e-9)}%`;
+const threshold = () => $("threshold").value / 100;
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// Cost = input tokens the model reported x its listed price (set in the provider).
+// INR uses the rate from /config; without one, only USD is shown.
+const money = (usd, digits, inrDigits) =>
+  `$${usd.toFixed(digits)}` + (usdInr ? ` (₹${(usd * usdInr.inr_per_usd).toFixed(inrDigits)})` : "");
+
+function costLine(d) {
+  if (d.input_tokens == null) return "";
+  const tokens = `${d.input_tokens.toLocaleString()} input tokens`;
+  if (!d.cost_usd) return `<div class="cost">${tokens} · <b>$0${usdInr ? " / ₹0" : ""}</b> (runs on your machine)</div>`;
+  return `<div class="cost">${tokens} · <b>${money(d.cost_usd, 6, 4)}</b> this ticket · ${money(d.cost_usd * 1000, 3, 2)} per 1,000 tickets</div>`;
+}
+
+function renderCard(result) {
+  const name = cap(result.provider);
+  if (!result.decision) {
+    return `<article class="panel card">
+      <h2>${name}</h2>
+      <div class="badge human">SEND TO HUMAN</div>
+      <div class="error">${esc(result.error)}</div>
+    </article>`;
+  }
+  const d = result.decision;
+  const r = route(d, threshold());
+  const bars = Object.entries(d.team_probs).map(([team, p]) => `
+    <div class="row ${team === r.team ? "top" : ""}">
+      <span>${cap(team)}</span>
+      <div class="track"><div class="fill" style="width:${p * 100}%"></div>
+        <div class="mark" style="left:${threshold() * 100}%" title="threshold"></div></div>
+      <span class="pct">${pct(p)}</span>
+    </div>`).join("");
+  const refund = d.refund_prob >= 0.5 ? "Yes" : "No";
+  const urgent = d.urgency >= 4 ? `<span class="flag">URGENT</span>` : "";
+  return `<article class="panel card">
+    <h2>${name} <small>${d.runs_on ? `${d.runs_on} · ` : ""}${d.latency_ms < 1 ? "<1" : Math.round(d.latency_ms)} ms</small></h2>
+    <div class="badge ${r.action === "AUTO-HANDLE" ? "auto" : "human"}">${r.action}</div>
+    <div class="reason">${r.reason}</div>
+    <div class="label">Team</div>${bars}
+    <div class="facts">
+      <div class="fact"><div class="label">Urgency</div><div class="value">${d.urgency.toFixed(1)} / 5 ${urgent}</div></div>
+      <div class="fact"><div class="label">Refund requested</div><div class="value">${refund} <small>(${pct(d.refund_prob)})</small></div></div>
+    </div>
+    ${costLine(d)}
+  </article>`;
+}
+
+function render() {
+  $("results").innerHTML = lastResults.map(renderCard).join("");
+}
+
+async function routeTicket() {
+  const ticket = $("ticket").value.trim();
+  if (!ticket) return;
+  $("go").disabled = true;
+  $("go").textContent = "Routing...";
+  try {
+    const resp = await fetch("/route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket, provider: $("provider").value, threshold: threshold() }),
+    });
+    if (!resp.ok) throw new Error(`Server returned HTTP ${resp.status}`);
+    lastResults = await resp.json();
+  } catch (e) {
+    lastResults = [{ provider: "server", decision: null, error: `Request failed: ${e.message}` }];
+  }
+  render();
+  $("go").disabled = false;
+  $("go").textContent = "Route it";
+}
+
+$("threshold").addEventListener("input", () => {
+  $("thresholdOut").textContent = `${$("threshold").value}%`;
+  render();  // no model call: just re-apply the rule to the probabilities we already have
+});
+$("go").addEventListener("click", routeTicket);
+$("examples").innerHTML = EXAMPLES.map(([kind, title], i) => `<button data-i="${i}"><b>${kind}</b>${title}</button>`).join("");
+$("examples").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (btn) $("ticket").value = EXAMPLES[btn.dataset.i][2];
+});
+
+fetch("/config").then((r) => r.json()).then((c) => {
+  $("threshold").value = Math.round(c.default_threshold * 100);
+  $("thresholdOut").textContent = `${$("threshold").value}%`;
+  usdInr = c.usd_inr;
+  if (usdInr) $("rate").textContent = `Costs in ₹ use 1 USD = ₹${usdInr.inr_per_usd} (${usdInr.source}, ${usdInr.date}).`;
+}).catch(() => {});
+</script>
+</body>
+</html>
